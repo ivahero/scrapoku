@@ -1,0 +1,12 @@
+scrapy
+redis
+hiredis
+flask
+gunicorn
+honcho
+requests
+selenium
+ipython
+ipdb
+pip-tools
+pep8
