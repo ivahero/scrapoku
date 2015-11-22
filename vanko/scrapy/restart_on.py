@@ -1,0 +1,187 @@
+import os
+import logging
+import time
+import requests
+import traceback
+
+from scrapy import signals
+from scrapy.exceptions import NotConfigured
+from collections import defaultdict
+from threading import current_thread
+from twisted.internet import reactor, threads
+from requests.exceptions import ConnectionError
+
+from ..utils.heroku import HerokuRestart
+from . import ShowIP, CustomSettings
+
+
+CustomSettings.register(
+    RESTARTON_ENABLED=True,
+    RESTARTON_SILENCE_REQUESTS=True,
+    RESTARTON_PAGECOUNT=0,
+    RESTARTON_ITEMCOUNT=0,
+    RESTARTON_TIMEOUT=0,
+    RESTARTON_ERRORCOUNT=10,
+    RESTARTON_PRO_TIMEOUT=10.0,
+    RESTARTON_METHOD='auto',  # stop, exit, restart, pro, auto
+    )
+
+
+class RestartOn(object):
+    """
+    This extension will restart the heroku dyno or refresh upstream proxy
+    or just stop current linux process when a condition is triggered.
+    """
+
+    refresh_selector = 'http://localhost/_PRO_/REFRESH/'
+    requests_logger = 'requests.packages.urllib3'
+    progress_report_sec = 5.0
+    progress_poll_sec = 0.5
+    logger = logging.getLogger(__name__.rpartition('.')[2])
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(crawler)
+
+    def __init__(self, crawler):
+        if not crawler.settings.getbool('RESTARTON_ENABLED'):
+            self.logger.info('%s is disabled', type(self).__name__)
+            raise NotConfigured
+
+        self.crawler = crawler
+        self.restart_on = {}
+        self.counter = defaultdict(int)
+        self.timeout_task = None
+        self.restart_in_progress = False
+
+        s = crawler.settings
+        self.method = s.get('RESTARTON_METHOD')
+        assert self.method in 'auto finish exit restart pro'.split()
+
+        if self.method == 'auto':
+            if s.getbool('HEROKU'):
+                self.method = 'restart'
+            elif os.environ.get('http_proxy', '').startswith('http://'):
+                self.method = 'pro'
+            else:
+                self.method = 'stop'
+            self.logger.debug('Restart method: %s', self.method)
+
+        self.pro_timeout = s.getfloat('RESTARTON_PRO_TIMEOUT')
+
+        self._condition('errorcount', 'error_count', 'spider_error')
+        self._condition('pagecount', 'page_count', 'response_received')
+        self._condition('timeout', 'spider_opened', None)
+        self._condition('itemcount', 'item_scraped', None)
+        self._condition(None, 'spider_closed', None)
+
+        if s.getbool('RESTARTON_SILENCE_REQUESTS'):
+            logging.getLogger(self.requests_logger).setLevel(logging.WARNING)
+
+    def _condition(self, name, method, signal):
+        if name is not None:
+            self.restart_on[name] = self.crawler.settings.getfloat(
+                'RESTARTON_' + name.upper())
+        if name is None or self.restart_on[name]:
+            self.crawler.signals.connect(
+                getattr(self, method),
+                signal=getattr(signals, (signal or method)))
+
+    def _event(self, name, spider, restart=True):
+        self.counter[name] += 1
+        flag = self.counter[name] == self.restart_on[name]
+        if flag and restart:
+            self.restart(spider, name)
+            self.counter[name] = 0
+
+    def error_count(self, failure, response, spider):
+        self._event('errorcount', spider)
+
+    def page_count(self, response, request, spider):
+        self._event('pagecount', spider)
+
+    def item_scraped(self, item, spider):
+        self._event('itemcount', spider)
+
+    def spider_opened(self, spider):
+        self.timeout_task = reactor.callLater(self.restart_on['timeout'],
+                                              self.restart, spider, 'timeout')
+
+    def spider_closed(self, spider):
+        if self.timeout_task and self.timeout_task.active():
+            self.timeout_task.cancel()
+
+    def restart(self, spider, reason):
+        m = self.method
+        self.logger.info('Refreshing spider (%s) with reason "%s"', m, reason)
+        if m != 'pro':
+            self.crawler.engine.close_spider(spider, 'restarton_' + reason)
+        if m == 'restart':
+            HerokuRestart(now=True)
+        elif m == 'stop':
+            self.crawler.stop()
+        elif m == 'exit':
+            self.logger.info('Application terminated on condition.')
+            os._exit(0)
+        elif m == 'finish':
+            self.crawler.engine.close_spider(spider, reason='finished')
+        elif m == 'pro':
+            threads.deferToThread(self._refresh_pro_singleton)
+
+    def _refresh_pro_singleton(self):
+        if not self.restart_in_progress:
+            try:
+                self.restart_in_progress = True
+                self._refresh_pro()
+            finally:
+                self.restart_in_progress = False
+        else:
+            self.logger.warning('Refresh already running')
+
+    def _refresh_pro(self):
+        # "pro" method
+        engine = self.crawler.engine
+        downloader = engine.downloader
+        proxies = ShowIP.get_proxies()
+
+        engine.pause()
+        self.logger.debug('Engine paused')
+
+        try:
+            t1 = t2 = t = time.time()
+            while downloader.active and t < t1 + self.pro_timeout:
+                time.sleep(self.progress_poll_sec)
+                if t > t2 + self.progress_report_sec:
+                    t2 = t
+                    self.logger.debug('Still %d active downloads pending',
+                                      len(downloader.active))
+                t = time.time()
+
+            if downloader.active:
+                self.logger.warning('Still %d downloads pending after %fs',
+                                    len(downloader.active), self.pro_timeout)
+
+            try:
+                self.logger.debug('Refreshing from %s', current_thread().name)
+                res = requests.get(self.refresh_selector, proxies=proxies)
+                if res.status_code != 200:
+                    self.logger.warning('The refresh request status is %d',
+                                        res.status_code)
+            except ConnectionError:
+                self.logger.warning(traceback.format_exc(limit=6))
+
+            time.sleep(self.progress_report_sec)
+
+            t1 = time.time()
+            via = None
+            while time.time() < t1 + self.pro_timeout:
+                try:
+                    via = ShowIP.get_ip(proxies)
+                    break
+                except ConnectionError:
+                    time.sleep(self.progress_poll_sec)
+            self.logger.info('Now via: %s', via)
+
+        finally:
+            engine.unpause()
+            self.logger.debug('Engine resumed')
