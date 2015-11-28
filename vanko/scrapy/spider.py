@@ -24,6 +24,8 @@ CustomSettings.register(
     PROXY='',
     SPIDER_FIX_PROXY=True,
     SPIDER_BACKEND_tmpl='%(STORAGE_BACKEND)s',
+    UPLOAD_INFO_KEY='%(spider)s:upload-info',
+    UPLOAD_INFO_RESET=False,
     )
 
 
@@ -93,6 +95,7 @@ class CustomSpider(Spider):
 
     def opened(self):
         self.backend = self.settings.get('SPIDER_BACKEND')
+        self.upload_info_key = self.settings.get('UPLOAD_INFO_KEY')
         self.encoder = JSONEncoder()
         self.crawler_stopped = False
         self.open_database()
@@ -193,6 +196,16 @@ class CustomSpider(Spider):
         if key is not None:
             self.store_item(table, key, data)
 
+    def upload_info(self, op, key, data=None):
+        if not self.upload_info_key:
+            return
+        if op == 'get':
+            data = self.redis.hget(self.upload_info_key, key)
+            if data is not None:
+                return json.loads(data)
+        if op == 'set':
+            self.redis.hset(self.upload_info_key, key, json.dumps(data))
+
     def reset_scheduler(self):
         s = self.settings
         tables = []
@@ -202,6 +215,9 @@ class CustomSpider(Spider):
         key = s.get('SCHEDULER_DUPEFILTER_TABLE')
         if key:
             tables.extend((key, key + '-url'))
+
+        if self.upload_info_key and s.getbool('UPLOAD_INFO_RESET'):
+            tables.append(self.upload_info_key)
 
         backend = s.get('SCHEDULER_BACKEND')
         ss_url = s.get('SCHEDULER_STORAGE_URL')
