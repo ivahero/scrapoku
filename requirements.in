@@ -6,6 +6,8 @@ gunicorn
 honcho
 requests
 selenium
+paramiko
+pillow
 ipython
 ipdb
 pip-tools
