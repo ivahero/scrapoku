@@ -8,6 +8,8 @@ requests
 selenium
 paramiko
 pillow
+xlsxwriter
+openpyxl
 ipython
 ipdb
 pip-tools
