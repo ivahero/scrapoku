@@ -5,10 +5,9 @@ Copyright (c) Rolando Espinoza La fuente
 All rights reserved.
 """
 
-from scrapy.utils.serialize import ScrapyJSONEncoder
 from twisted.internet.threads import deferToThread
-
 from . import connection
+from ..utils import JSONEncoder
 
 
 class RedisPipeline(object):
@@ -16,7 +15,7 @@ class RedisPipeline(object):
 
     def __init__(self, server):
         self.server = server
-        self.encoder = ScrapyJSONEncoder()
+        self.encoder = JSONEncoder()
 
     @classmethod
     def from_settings(cls, settings):
