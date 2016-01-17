@@ -5,7 +5,6 @@ flask
 gunicorn
 honcho
 requests
-selenium
 paramiko
 pillow
 xlsxwriter
