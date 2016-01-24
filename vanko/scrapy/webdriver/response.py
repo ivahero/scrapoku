@@ -1,3 +1,9 @@
+"""
+This source code is based on the scrapy_webdriver project located at
+  https://github.com/brandicted/scrapy-webdriver
+Copyright (c) 2013 Nicolas Cadou, Sosign Interactive
+"""
+
 import re
 import logging
 from time import time, sleep
@@ -11,11 +17,9 @@ from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import InvalidSelectorException
 from selenium.common.exceptions import WebDriverException
 
-logger = logging.getLogger()
-
 
 class WebdriverResponseMixin(object):
-
+    logger = logging.getLogger(__name__)
     implicitly_wait = 30
     poll_sec = 1.0
 
@@ -76,7 +80,7 @@ class WebdriverResponseMixin(object):
             body = self.webdriver.find_element_by_tag_name('body')
             body.click()
         except WebDriverException as err:
-            logger.debug('body click missed: %s', str(err))
+            self.logger.debug('body click missed: %s', str(err))
         sleep(delay)
 
     def click_select(self, select, option, method=None,
@@ -122,14 +126,14 @@ class WebdriverResponseMixin(object):
         except ValueError as err:
             # FIXME: Bug: https://github.com/SeleniumHQ/selenium/issues/1478
             msg = err.message
-            logger.debug('Click failed (ValueError): %s', msg)
+            self.logger.debug('Click failed (ValueError): %s', msg)
             if 'No JSON object could be decoded' in msg:
                 raise StaleElementReferenceException(msg)
             raise
         except TypeError as err:
             # FIXME: Bug: https://github.com/SeleniumHQ/selenium/issues/1497
             msg = err.message
-            logger.debug('Click failed (TypeError): %s', msg)
+            self.logger.debug('Click failed (TypeError): %s', msg)
             if 'string indices must be integers' in msg:
                 raise StaleElementReferenceException(msg)
             raise
@@ -140,8 +144,8 @@ class WebdriverResponseMixin(object):
         else:
             selected = '<unknown>'
 
-        logger.debug('click_select(%s, %s)=%s',
-                     select._el.id, option, selected)
+        self.logger.debug('click_select(%s, %s)=%s',
+                          select._el.id, option, selected)
         return selected
 
     def click_select_safe(self, element_id, option, name=None, method=None,
@@ -152,7 +156,7 @@ class WebdriverResponseMixin(object):
             timeout = self.implicitly_wait
         poll_sec = self.poll_sec
 
-        logger.debug('fill %s', name)
+        self.logger.debug('fill %s', name)
         end_wait = time() + timeout
 
         while time() < end_wait:
@@ -162,7 +166,7 @@ class WebdriverResponseMixin(object):
                 sel = ui.Select(el_sel)
             except StaleElementReferenceException as err:
                 msg = str(err).rstrip()
-                logger.debug('pending %s selector (%s)', name, msg)
+                self.logger.debug('pending %s selector (%s)', name, msg)
                 sleep(poll_sec)
                 continue
 
@@ -173,7 +177,7 @@ class WebdriverResponseMixin(object):
                     break
             except (IndexError, StaleElementReferenceException) as err:
                 msg = str(err).rstrip()
-                logger.debug('pending %s options (%s)', name, msg)
+                self.logger.debug('pending %s options (%s)', name, msg)
                 sleep(poll_sec)
                 continue
         else:
@@ -184,7 +188,7 @@ class WebdriverResponseMixin(object):
             timeout = self.implicitly_wait
         el = WebDriverWait(self.webdriver, timeout).until(
             ec.element_to_be_clickable((by, element_id)))
-        logger.debug('now click %s', element_id)
+        self.logger.debug('now click %s', element_id)
         el.click()
 
     def send_keys_safe(self, element_id, keys, timeout=None):
@@ -200,7 +204,7 @@ class WebdriverResponseMixin(object):
                 break
             except WebDriverException as err:
                 msg = str(err).rstrip()
-                logger.debug('Cannot send keys: %s', msg)
+                self.logger.debug('Cannot send keys: %s', msg)
                 if re.search(r"'?undefined'? is not an object", msg):
                     sleep(poll_sec)
                     continue
@@ -213,7 +217,7 @@ class WebdriverResponseMixin(object):
             'return [window.jQuery && window.jQuery.active, '
             'window.Ajax && window.Ajax.activeRequestCount, '
             'window.dojo && window.io.XMLHTTPTransport.inFlight.length];')
-        logger.debug('active ajax requests: %s', counts)
+        self.logger.debug('active ajax requests: %s', counts)
         return sum(n for n in counts if n is not None)
 
     def wait_for_ajax(self, timeout=None, poll_sec=None, trigger='end'):
@@ -221,7 +225,7 @@ class WebdriverResponseMixin(object):
             timeout = self.implicitly_wait
         if poll_sec is None:
             poll_sec = self.poll_sec
-        logger.debug('wait for ajax to %s (%ss)', trigger, timeout)
+        self.logger.debug('wait for ajax to %s (%ss)', trigger, timeout)
 
         if trigger == 'start':
             def is_pending(flag):

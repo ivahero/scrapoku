@@ -1,3 +1,9 @@
+"""
+This source code is based on the scrapy_webdriver project located at
+  https://github.com/brandicted/scrapy-webdriver
+Copyright (c) 2013 Nicolas Cadou, Sosign Interactive
+"""
+
 from functools import partial
 
 from selenium.webdriver.common.action_chains import ActionChains
@@ -13,9 +19,8 @@ class WaitingActionChains(ActionChains):
             args = []
         if name:
             condition = getattr(ec, name)(*args)
-        if condition is None:
-            raise ValueError('You must provide a condition, either directly '
-                             'or by specifying its name.')
+        assert condition is not None, \
+            'Please provide a condition directly or specify its name'
 
         def do_wait(condition):
             return WebDriverWait(self._driver, timeout).until(condition)

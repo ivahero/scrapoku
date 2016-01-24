@@ -1,9 +1,12 @@
+"""
+This source code is based on the scrapy_webdriver project located at
+  https://github.com/brandicted/scrapy-webdriver
+Copyright (c) 2013 Nicolas Cadou, Sosign Interactive
+"""
+
 import re
 
-try:
-    from scrapy.selector import Selector, XPathSelectorList
-except ImportError:  # scrapy < 0.20
-    from scrapy.selector import XPathSelector as Selector, XPathSelectorList
+from scrapy.selector import Selector, XPathSelectorList
 
 _UNSUPPORTED_XPATH_ENDING = re.compile(r'.*/((@)?([^/()]+)(\(\))?)$')
 

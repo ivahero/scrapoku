@@ -1,22 +1,31 @@
+"""
+This source code is based on the scrapy_webdriver project located at
+  https://github.com/brandicted/scrapy-webdriver
+Copyright (c) 2013 Nicolas Cadou, Sosign Interactive
+"""
+
 from scrapy.http import Request, TextResponse
 from selenium.webdriver.common.action_chains import ActionChains
+from .response import WebdriverResponseMixin
 
 
 class WebdriverRequest(Request):
     """A Request needed when using the webdriver download handler."""
-    WAITING = None
 
-    def __init__(self, url, manager=None, **kwargs):
+    def __init__(self, url, manager=None, lock=True, **kwargs):
         super(WebdriverRequest, self).__init__(url, **kwargs)
         self.manager = manager
+        self.lock = lock
 
     def replace(self, *args, **kwargs):
         kwargs.setdefault('manager', self.manager)
+        kwargs.setdefault('lock', self.lock)
         return super(WebdriverRequest, self).replace(*args, **kwargs)
 
 
 class WebdriverActionRequest(WebdriverRequest):
     """A Request that handles in-page webdriver actions (action chains)."""
+
     def __init__(self, response, actions=None, **kwargs):
         kwargs.setdefault('manager', response.request.manager)
         url = kwargs.pop('url', response.request.url)
@@ -31,7 +40,7 @@ class WebdriverActionRequest(WebdriverRequest):
         return super(WebdriverActionRequest, self).replace(*args, **kwargs)
 
 
-class WebdriverResponse(TextResponse):
+class WebdriverResponse(WebdriverResponseMixin, TextResponse):
     """A Response that will feed the webdriver page into its body."""
     def __init__(self, url, webdriver, **kwargs):
         kwargs.setdefault('body', webdriver.page_source)
