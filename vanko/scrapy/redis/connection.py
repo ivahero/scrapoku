@@ -7,7 +7,6 @@ All rights reserved.
 
 import redis
 
-
 # Default values.
 REDIS_URL = None
 REDIS_HOST = 'localhost'

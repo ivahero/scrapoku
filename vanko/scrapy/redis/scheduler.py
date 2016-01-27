@@ -5,16 +5,18 @@ Copyright (c) Rolando Espinoza La fuente
 All rights reserved.
 """
 
+import six
+import types
+from scrapy import Spider
 from scrapy.utils.misc import load_object
 
 from . import connection
 from .dupefilter import RFPDupeFilter
 
-
 # default values
 SCHEDULER_PERSIST = False
 QUEUE_KEY = '%(spider)s:requests'
-QUEUE_CLASS = 'scrapy_redis.queue.SpiderPriorityQueue'
+QUEUE_CLASS = 'vanko.scrapy.redis.queue.SpiderPriorityQueue'
 DUPEFILTER_KEY = '%(spider)s:dupefilter'
 IDLE_BEFORE_CLOSE = 0
 
