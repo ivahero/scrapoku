@@ -24,7 +24,8 @@ IDLE_BEFORE_CLOSE = 0
 class Scheduler(object):
     """Redis-based scheduler"""
 
-    def __init__(self, server, persist, queue_key, queue_cls, dupefilter_key, idle_before_close):
+    def __init__(self, server, persist, queue_key, queue_cls, dupefilter_key,
+                 idle_before_close):
         """Initialize scheduler.
 
         Parameters
@@ -51,11 +52,14 @@ class Scheduler(object):
     def from_settings(cls, settings):
         persist = settings.get('SCHEDULER_PERSIST', SCHEDULER_PERSIST)
         queue_key = settings.get('SCHEDULER_QUEUE_KEY', QUEUE_KEY)
-        queue_cls = load_object(settings.get('SCHEDULER_QUEUE_CLASS', QUEUE_CLASS))
+        queue_cls = load_object(settings.get('SCHEDULER_QUEUE_CLASS',
+                                             QUEUE_CLASS))
         dupefilter_key = settings.get('DUPEFILTER_KEY', DUPEFILTER_KEY)
-        idle_before_close = settings.get('SCHEDULER_IDLE_BEFORE_CLOSE', IDLE_BEFORE_CLOSE)
+        idle_before_close = settings.get('SCHEDULER_IDLE_BEFORE_CLOSE',
+                                         IDLE_BEFORE_CLOSE)
         server = connection.from_settings(settings)
-        return cls(server, persist, queue_key, queue_cls, dupefilter_key, idle_before_close)
+        return cls(server, persist, queue_key, queue_cls, dupefilter_key,
+                   idle_before_close)
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -67,12 +71,14 @@ class Scheduler(object):
     def open(self, spider):
         self.spider = spider
         self.queue = self.queue_cls(self.server, spider, self.queue_key)
-        self.df = RFPDupeFilter(self.server, self.dupefilter_key % {'spider': spider.name})
+        self.df = RFPDupeFilter(self.server,
+                                self.dupefilter_key % {'spider': spider.name})
         if self.idle_before_close < 0:
             self.idle_before_close = 0
         # notice if there are requests already in the queue to resume the crawl
         if len(self.queue):
-            spider.log("Resuming crawl (%d requests scheduled)" % len(self.queue))
+            spider.log('Resuming crawl (%d requests scheduled)'
+                       % len(self.queue))
 
     def close(self, reason):
         if not self.persist:
@@ -83,14 +89,16 @@ class Scheduler(object):
         if not request.dont_filter and self.df.request_seen(request):
             return
         if self.stats:
-            self.stats.inc_value('scheduler/enqueued/redis', spider=self.spider)
+            self.stats.inc_value('scheduler/enqueued/redis',
+                                 spider=self.spider)
         self.queue.push(request)
 
     def next_request(self):
         block_pop_timeout = self.idle_before_close
         request = self.queue.pop(block_pop_timeout)
         if request and self.stats:
-            self.stats.inc_value('scheduler/dequeued/redis', spider=self.spider)
+            self.stats.inc_value('scheduler/dequeued/redis',
+                                 spider=self.spider)
         return request
 
     def has_pending_requests(self):
