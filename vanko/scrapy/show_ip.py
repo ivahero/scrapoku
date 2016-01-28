@@ -14,6 +14,8 @@ class ShowIP(object):
     def __init__(self, crawler):
         if crawler.settings.getbool('HEROKU', True):
             crawler.signals.connect(self.spider_opened, signals.spider_opened)
+        if crawler.settings.get('WEBDRIVER_BROWSER'):
+            type(self).webdriver_proxy = crawler.settings.get('PROXY')
 
     def spider_opened(self, spider):
         self.logger.info('Spider IP address: %s', self.get_ip())
@@ -32,8 +34,11 @@ class ShowIP(object):
     def get_proxies(cls, proxies=None):
         if proxies is None:
             proxies = {}
-            proxy = os.environ.get('http_proxy', '')
+            proxy = getattr(cls, 'webdriver_proxy',
+                            os.environ.get('http_proxy', ''))
             if proxy:
+                if '://' not in proxy:
+                    proxy = 'http://' + proxy
                 proxies['http'] = proxy
             proxy = os.environ.get('https_proxy', '')
             if proxy:
