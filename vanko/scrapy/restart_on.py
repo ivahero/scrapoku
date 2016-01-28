@@ -12,7 +12,7 @@ from twisted.internet import reactor, threads
 from requests.exceptions import ConnectionError
 
 from ..utils.heroku import HerokuRestart
-from . import ShowIP, CustomSettings
+from . import ShowIP, FastExit, CustomSettings
 
 
 CustomSettings.register(
@@ -56,15 +56,17 @@ class RestartOn(object):
 
         s = crawler.settings
         self.method = s.get('RESTARTON_METHOD')
-        assert self.method in 'auto finish exit restart pro'.split()
+        assert self.method in 'auto finish fast stop exit restart pro'.split()
 
         if self.method == 'auto':
             if s.getbool('HEROKU'):
                 self.method = 'restart'
             elif os.environ.get('http_proxy', '').startswith('http://'):
                 self.method = 'pro'
+            elif s.get('WEBDRIVER_BROWSER') and s.get('PROXY'):
+                self.method = 'pro'
             else:
-                self.method = 'stop'
+                self.method = 'fast'
             self.logger.debug('Restart method: %s', self.method)
 
         self.pro_timeout = s.getfloat('RESTARTON_PRO_TIMEOUT')
@@ -112,21 +114,61 @@ class RestartOn(object):
             self.timeout_task.cancel()
 
     def restart(self, spider, reason):
+        self._spider = spider
+        self._reason = reason
         m = self.method
         self.logger.info('Refreshing spider (%s) with reason "%s"', m, reason)
-        if m != 'pro':
-            self.crawler.engine.close_spider(spider, 'restarton_' + reason)
         if m == 'restart':
-            HerokuRestart(now=True)
+            self.fast_exit(restart=True)
+        elif m == 'fast':
+            self.fast_exit()
         elif m == 'stop':
             self.crawler.stop()
         elif m == 'exit':
+            self.pause_engine()
+            self.stop_engine()
             self.logger.info('Application terminated on condition.')
             os._exit(0)
         elif m == 'finish':
             self.crawler.engine.close_spider(spider, reason='finished')
         elif m == 'pro':
             threads.deferToThread(self._refresh_pro_singleton)
+
+    def fast_exit(self, restart=False):
+        def at_exit(spiders):
+            HerokuRestart().restart(stop_delay=0)
+        fast_exit = FastExit.get_instance(self.crawler, at_exit)
+        fast_exit.signal_shutdown()
+
+    def stop_engine(self):
+        self.crawler.engine.close_spider(self._spider,
+                                         'restarton_%s' % self._reason)
+
+    def pause_engine(self):
+        engine = self.crawler.engine
+        downloader = engine.downloader
+
+        engine.pause()
+        self.logger.debug('Engine paused')
+
+        t1 = t2 = t = time.time()
+        while downloader.active and t < t1 + self.pro_timeout:
+            time.sleep(self.progress_poll_sec)
+            if t > t2 + self.progress_report_sec:
+                t2 = t
+                self.logger.debug('Still %d active downloads pending',
+                                  len(downloader.active))
+            t = time.time()
+
+        if not downloader.active:
+            return True
+
+        self.logger.warning('Still %d downloads pending after %.1fs',
+                            len(downloader.active), self.pro_timeout)
+
+    def resume_engine(self):
+        self.crawler.engine.unpause()
+        self.logger.debug('Engine resumed')
 
     def _refresh_pro_singleton(self):
         if not self.restart_in_progress:
@@ -140,26 +182,10 @@ class RestartOn(object):
 
     def _refresh_pro(self):
         # "pro" method
-        engine = self.crawler.engine
-        downloader = engine.downloader
         proxies = ShowIP.get_proxies()
 
-        engine.pause()
-        self.logger.debug('Engine paused')
-
         try:
-            t1 = t2 = t = time.time()
-            while downloader.active and t < t1 + self.pro_timeout:
-                time.sleep(self.progress_poll_sec)
-                if t > t2 + self.progress_report_sec:
-                    t2 = t
-                    self.logger.debug('Still %d active downloads pending',
-                                      len(downloader.active))
-                t = time.time()
-
-            if downloader.active:
-                self.logger.warning('Still %d downloads pending after %fs',
-                                    len(downloader.active), self.pro_timeout)
+            self.pause_engine()
 
             try:
                 self.logger.debug('Refreshing from %s', current_thread().name)
@@ -183,5 +209,4 @@ class RestartOn(object):
             self.logger.info('Now via: %s', via)
 
         finally:
-            engine.unpause()
-            self.logger.debug('Engine resumed')
+            self.resume_engine()
