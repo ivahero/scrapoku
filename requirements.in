@@ -5,6 +5,8 @@ flask
 gunicorn
 honcho
 requests
+selenium==2.49.0
+python-dateutil
 paramiko
 pillow
 xlsxwriter

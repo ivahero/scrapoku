@@ -1,0 +1,10 @@
+xvfb
+fluxbox
+x11vnc
+autossh
+firefox
+#google-chrome-stable
+#libxss1
+util-linux
+x11-xkb-utils
+xfonts-100dpi
