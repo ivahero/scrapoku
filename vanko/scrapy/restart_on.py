@@ -1,6 +1,7 @@
 import os
 import logging
 import time
+import re
 import requests
 import traceback
 
@@ -23,7 +24,9 @@ CustomSettings.register(
     RESTARTON_TIMEOUT=0,
     RESTARTON_ERRORCOUNT=10,
     RESTARTON_PRO_TIMEOUT=10.0,
+    RESTARTON_DEL_ACTION='reset,purge,all=crawl',
     RESTARTON_METHOD='auto',  # stop, exit, restart, pro, auto
+    RESTARTON_COMMAND='',
     )
 
 
@@ -70,6 +73,8 @@ class RestartOn(object):
             self.logger.debug('Restart method: %s', self.method)
 
         self.pro_timeout = s.getfloat('RESTARTON_PRO_TIMEOUT')
+        self.del_action = s.get('RESTARTON_DEL_ACTION')
+        self.command = s.get('RESTARTON_COMMAND')
 
         self._condition('errorcount', 'error_count', 'spider_error')
         self._condition('pagecount', 'page_count', 'response_received')
@@ -134,10 +139,28 @@ class RestartOn(object):
         elif m == 'pro':
             threads.deferToThread(self._refresh_pro_singleton)
 
+    def _at_exit(self, spiders):
+        controller = HerokuRestart()
+        command = controller.shell_quote(self.command or
+                                         controller.get_command())
+        if self.del_action:
+            mo = re.search(r'(--action|ACTION)=([\w,]+)', command)
+            if mo:
+                argname = mo.group(1)
+                actions = mo.group(2).split(',')
+                for del_action in self.del_action.split(','):
+                    del_action, _, replacement = del_action.partition('=')
+                    if del_action in actions:
+                        if replacement:
+                            actions[actions.index[del_action]] = replacement
+                        else:
+                            actions.remove(del_action)
+                new_action = '{}={}'.format(argname, ','.join(actions))
+                command = re.sub(r'%s=[\w,]+' % argname, new_action, command)
+        controller.restart(stop_delay=0, command=command)
+
     def fast_exit(self, restart=False):
-        def at_exit(spiders):
-            HerokuRestart().restart(stop_delay=0)
-        fast_exit = FastExit.get_instance(self.crawler, at_exit)
+        fast_exit = FastExit.get_instance(self.crawler, self._at_exit)
         fast_exit.signal_shutdown()
 
     def stop_engine(self):

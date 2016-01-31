@@ -74,8 +74,12 @@ class HerokuRestart(object):
         if mo:
             command = mo.group(1)[1:-1].replace("'\\''", "'")
         if quote:
-            command = "'" + command.replace("'", "'\\''") + "'"
+            command = self.shell_quote(command)
         return command
+
+    @staticmethod
+    def shell_quote(command):
+        return "'" + command.replace("'", "'\\''") + "'"
 
     def run(self, command=None):
         url = self.get_url().rpartition('/')[0]
