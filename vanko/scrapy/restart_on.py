@@ -40,6 +40,7 @@ class RestartOn(object):
     requests_logger = 'requests.packages.urllib3'
     progress_report_sec = 5.0
     progress_poll_sec = 0.5
+    robust_handler = True
     logger = logging.getLogger(__name__.rpartition('.')[2])
 
     @classmethod
@@ -160,7 +161,8 @@ class RestartOn(object):
         controller.restart(stop_delay=0, command=command)
 
     def fast_exit(self, restart=False):
-        fast_exit = FastExit.get_instance(self.crawler, self._at_exit)
+        fast_exit = FastExit.get_instance(self.crawler, self._at_exit,
+                                          self.robust_handler)
         fast_exit.signal_shutdown()
 
     def stop_engine(self):

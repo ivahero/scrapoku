@@ -29,14 +29,16 @@ class FastExit(object):
     singleton = None
 
     @classmethod
-    def get_instance(cls, crawler, exit_handler=None):
+    def get_instance(cls, crawler, exit_handler=None, robust_handler=None):
         if not cls.singleton:
             cls.singleton = cls(crawler)
         if exit_handler:
             cls.singleton.exit_handler = exit_handler
+        if robust_handler is not None:
+            cls.singleton.robust_handler = robust_handler
         return cls.singleton
 
-    def __init__(self, crawler, exit_handler=None):
+    def __init__(self, crawler, exit_handler=None, robust_handler=False):
         self.crawler = crawler
         settings = crawler.settings
         self.name = type(self).__name__
@@ -52,6 +54,7 @@ class FastExit(object):
             '{}: FASTEXIT_USER_HANDLER must be callable'.format(self.name)
         self.user_handler = user_handler
         self.exit_handler = exit_handler
+        self.robust_handler = robust_handler
 
         self.saved_requests = set()
         self.atexit_called = False
@@ -102,6 +105,9 @@ class FastExit(object):
         reactor.addSystemEventTrigger('before', 'shutdown', self.at_exit)
         reactor.callFromThread(self.cprocess._graceful_stop_reactor)
 
+        if self.robust_handler:
+            self.call_exit_handlers()
+
         self.call_later(self.grace_secs, self.force_shutdown)
 
     def force_shutdown(self, signum=None, stacktrace=None):
@@ -136,21 +142,22 @@ class FastExit(object):
         self.atexit_called = True
 
         self.save_unfinished_requests()
+        self.call_exit_handlers()
+        self.logger.info('Process finished')
 
-        spiders = [crawler.spider for crawler in self.get_crawlers()]
-        if not spiders:
-            spiders = None
-        elif len(spiders) == 1:
-            spiders = spiders[0]
-
+    def call_exit_handlers(self):
+        if self.user_handler or self.exit_handler:
+            spiders = [crawler.spider for crawler in self.get_crawlers()]
+            if not spiders:
+                spiders = None
+            elif len(spiders) == 1:
+                spiders = spiders[0]
         if self.user_handler:
             self.user_handler(spiders)
             self.user_handler = None
         if self.exit_handler:
             self.exit_handler(spiders)
             self.exit_handler = None
-
-        self.logger.info('Process finished')
 
     def get_crawlers(self):
         return self.cprocess.crawlers if self.all_crawlers else [self.crawler]
