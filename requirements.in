@@ -2,9 +2,14 @@ scrapy
 redis
 hiredis
 flask
+flask-admin
+flask-sqlalchemy
+flask-sslify
+flask-basicauth
 gunicorn
 honcho
 requests
+pymongo
 selenium==2.49.0
 python-dateutil
 paramiko
