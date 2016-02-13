@@ -1,3 +1,10 @@
+"""
+This source code is based on the scrapy_redis project located at
+  https://github.com/rolando/scrapy-redis
+Copyright (c) Rolando Espinoza La fuente
+All rights reserved.
+"""
+
 import redis
 
 
