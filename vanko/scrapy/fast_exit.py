@@ -2,6 +2,8 @@ import os
 import six
 import signal
 import logging
+import time
+import threading
 
 from scrapy.utils.misc import load_object
 from scrapy.crawler import CrawlerProcess
@@ -9,6 +11,8 @@ from scrapy.utils.ossignal import install_shutdown_handlers
 from twisted.internet import reactor
 
 from . import CustomSettings
+from ..utils.signal import catch_break
+
 
 CustomSettings.register(
     FASTEXIT_GRACE_SECS=4,
@@ -51,6 +55,9 @@ class FastExit(object):
 
         self.saved_requests = set()
         self.atexit_called = False
+        self.alarm_canceler = None
+        self.last_sig_time = None
+        self.last_sig_num = None
 
         if not FastExit.installed:
             self.install()
@@ -73,38 +80,51 @@ class FastExit(object):
 
         FastExit.cprocess = cprocess
         install_shutdown_handlers(self.signal_shutdown)
-        self.logger.debug('%s: Handler installed', self.name)
+        catch_break(self.signal_shutdown, winonly=True, signals=False)
+        self.logger.debug('%s: Handlers installed', self.name)
 
     def signal_shutdown(self, signum=None, stacktrace=None):
         self.logger.info('%s: Starting graceful shutdown (signal:%s)',
                          self.name, signum)
+        if signum is not None:
+            self.last_sig_time = time.time()
+            self.last_sig_num = signum
         self.print_spiders('grace')
 
-        install_shutdown_handlers(self.force_shutdown)
+        try:
+            install_shutdown_handlers(self.force_shutdown)
+        except ValueError:
+            # ValueError('signal.signal works only from main thread')
+            # occurs because on windows we are called from background
+            # thread vanko.utils.multiprocessing.Process2._break_waiter()
+            reactor.callLater(0,
+                              install_shutdown_handlers, self.force_shutdown)
         reactor.addSystemEventTrigger('before', 'shutdown', self.at_exit)
         reactor.callFromThread(self.cprocess._graceful_stop_reactor)
 
-        if self.grace_secs > 0:
-            signal.signal(signal.SIGALRM, self.force_shutdown)
-            signal.alarm(self.grace_secs)
-        else:
-            self.force_shutdown(signum, stacktrace)
+        self.call_later(self.grace_secs, self.force_shutdown)
 
     def force_shutdown(self, signum=None, stacktrace=None):
+        if signum is not None and self.last_sig_num == signum and \
+                time.time() - self.last_sig_time < 0.9:
+            self.logger.info('%s: Ignoring spurious signal (signal:%s)',
+                             self.name, signum)
+            return
         self.logger.info('%s: Forcing unclean shutdown (signal:%s)',
                          self.name, signum)
         self.print_spiders('force')
-
-        install_shutdown_handlers(signal.SIG_IGN)
+        try:
+            install_shutdown_handlers(signal.SIG_IGN)
+        except ValueError:
+            # ValueError('signal.signal works only from main thread')
+            # occurs because due to win32 signals limitation we use
+            # background alarm thread on Windows.
+            reactor.callLater(0, install_shutdown_handlers, signal.SIG_IGN)
         reactor.callFromThread(self.cprocess._stop_reactor)
-
-        if self.force_secs > 0:
-            signal.signal(signal.SIGALRM, self.kill_process)
-            signal.alarm(self.force_secs)
-        else:
-            self.kill_process(signum, stacktrace)
+        self.call_later(self.force_secs, self.kill_process)
 
     def kill_process(self, signum=None, stacktrace=None):
+        self.call_later(0, None)
         self.print_spiders('exit')
         self.at_exit()
         os._exit(2)
@@ -160,3 +180,26 @@ class FastExit(object):
                 urls = [request.url for request in slot.inprogress]
             self.logger.debug('Active requests of spider %s in "%s" stage: %s',
                               spider.name, stage, ' '.join(urls))
+
+    def call_later(self, delay, func):
+        if self.alarm_canceler:
+            self.alarm_canceler.set()
+            self.alarm_canceler = None
+        if not func:
+            return
+        if delay > 0:
+            self.alarm_canceler = canc = threading.Event()
+            t = threading.Thread(target=self.alarmer, args=(delay, func, canc))
+            t.setDaemon(False)
+            t.start()
+        else:
+            func()
+
+    def alarmer(self, delay, func, canceler):
+        curtime = time.time()
+        endtime = curtime + delay
+        while endtime - curtime > 0:
+            time.sleep(endtime - curtime)
+            curtime = time.time()
+        if not canceler.is_set():
+            func()
