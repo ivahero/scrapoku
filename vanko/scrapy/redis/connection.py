@@ -5,21 +5,19 @@ Copyright (c) Rolando Espinoza La fuente
 All rights reserved.
 """
 
-import redis
-
 # Default values.
 REDIS_URL = None
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 
 
-def from_settings(settings):
-    url = settings.get('REDIS_URL',  REDIS_URL)
-    host = settings.get('REDIS_HOST', REDIS_HOST)
-    port = settings.get('REDIS_PORT', REDIS_PORT)
+def from_settings(settings_or_url):
+    from redis import Redis
 
-    # REDIS_URL takes precedence over host/port specification.
-    if url:
-        return redis.from_url(url)
+    if isinstance(settings_or_url, basestring):
+        return Redis.from_url(settings_or_url)
+    if settings_or_url.get('REDIS_URL',  REDIS_URL):
+        return Redis.from_url(settings_or_url.get('REDIS_URL',  REDIS_URL))
     else:
-        return redis.Redis(host=host, port=port)
+        return Redis(host=settings_or_url.get('REDIS_HOST', REDIS_HOST),
+                     port=settings_or_url.getint('REDIS_PORT', REDIS_PORT))
