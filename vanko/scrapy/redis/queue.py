@@ -5,16 +5,19 @@ Copyright (c) Rolando Espinoza La fuente
 All rights reserved.
 """
 
-from scrapy.utils.reqser import request_to_dict, request_from_dict
+from ..reqser import request_to_dict2, request_from_dict2
 
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
 
+__all__ = ['SpiderQueue', 'SpiderPriorityQueue', 'SpiderStack']
+
 
 class Base(object):
     """Per-spider queue/stack base class"""
+    debug = False
 
     def __init__(self, server, spider, key):
         """Initialize per-spider redis queue.
@@ -26,15 +29,18 @@ class Base(object):
         """
         self.server = server
         self.spider = spider
-        self.key = key % {'spider': spider.name}
+        self.key = key % dict(spider=spider.name)
+        self.debug = type(self).debug
+        self.url_key = self.key + '-url' if self.debug else None
 
     def _encode_request(self, request):
         """Encode a request object"""
-        return pickle.dumps(request_to_dict(request, self.spider), protocol=-1)
+        return pickle.dumps(request_to_dict2(request, self.spider),
+                            protocol=-1)
 
     def _decode_request(self, encoded_request):
         """Decode an request previously encoded"""
-        return request_from_dict(pickle.loads(encoded_request), self.spider)
+        return request_from_dict2(pickle.loads(encoded_request), self.spider)
 
     def __len__(self):
         """Return the length of the queue"""
@@ -51,6 +57,8 @@ class Base(object):
     def clear(self):
         """Clear queue/stack"""
         self.server.delete(self.key)
+        if self.url_key:
+            self.server.delete(self.url_key)
 
 
 class SpiderQueue(Base):
@@ -63,6 +71,8 @@ class SpiderQueue(Base):
     def push(self, request):
         """Push a request"""
         self.server.lpush(self.key, self._encode_request(request))
+        if self.url_key:
+            self.server.lpush(self.url_key, request.url)
 
     def pop(self, timeout=0):
         """Pop a request"""
@@ -73,6 +83,8 @@ class SpiderQueue(Base):
         else:
             data = self.server.rpop(self.key)
         if data:
+            if self.url_key:
+                self.server.rpop(self.url_key)
             return self._decode_request(data)
 
 
@@ -113,6 +125,8 @@ class SpiderStack(Base):
     def push(self, request):
         """Push a request"""
         self.server.lpush(self.key, self._encode_request(request))
+        if self.url_key:
+            self.server.lpush(self.url_key, request.url)
 
     def pop(self, timeout=0):
         """Pop a request"""
@@ -124,7 +138,6 @@ class SpiderStack(Base):
             data = self.server.lpop(self.key)
 
         if data:
+            if self.url_key:
+                self.server.lpop(self.url_key)
             return self._decode_request(data)
-
-
-__all__ = ['SpiderQueue', 'SpiderPriorityQueue', 'SpiderStack']
