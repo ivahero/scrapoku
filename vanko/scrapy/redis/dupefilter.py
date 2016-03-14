@@ -5,28 +5,20 @@ Copyright (c) Rolando Espinoza La fuente
 All rights reserved.
 """
 
-import time
-
+from time import time
 from scrapy.dupefilters import BaseDupeFilter
 from scrapy.utils.request import request_fingerprint
-
 from . import connection
 
 
 class RFPDupeFilter(BaseDupeFilter):
     """Redis-based request duplication filter"""
+    debug = False
 
     def __init__(self, server, key):
-        """Initialize duplication filter
-
-        Parameters
-        ----------
-        server : Redis instance
-        key : str
-            Where to store fingerprints
-        """
         self.server = server
         self.key = key
+        self.debug = type(self).debug
 
     @classmethod
     def from_settings(cls, settings):
@@ -34,7 +26,7 @@ class RFPDupeFilter(BaseDupeFilter):
         # create one-time key. needed to support to use this
         # class as standalone dupefilter with scrapy's default scheduler
         # if scrapy passes spider on open() method this wouldn't be needed
-        key = "dupefilter:%s" % int(time.time())
+        key = 'dupefilter:%d' % int(time())
         return cls(server, key)
 
     @classmethod
@@ -44,6 +36,8 @@ class RFPDupeFilter(BaseDupeFilter):
     def request_seen(self, request):
         fp = request_fingerprint(request)
         added = self.server.sadd(self.key, fp)
+        if self.debug:
+            self.server.sadd(self.key + '-url', request.url)
         return not added
 
     def close(self, reason):
@@ -53,3 +47,4 @@ class RFPDupeFilter(BaseDupeFilter):
     def clear(self):
         """Clears fingerprints data"""
         self.server.delete(self.key)
+        self.server.delete(self.key + '-url')
