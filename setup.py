@@ -12,21 +12,21 @@ with open(os.path.join(curdir, 'README.rst')) as f:
     README = f.read()
 
 setup(
-    name='vanko-tools',
+    name='hero-crawl',
     version=VERSION,
     author='Ivan Andreev',
     author_email='ivandeex@gmail.com',
-    url='https://github.com/ivandeex/',
-    description='Scrapy wrappers and extensions',
+    url='https://github.com/ivandeex/hero-crawl',
+    description='Helpers for Scrapy and Flask on Heroku',
     long_description=README,
-    license='BSD',
+    license='MIT',
     packages=find_packages(),
     include_package_data=True,
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
-        'Programming Language :: Python',
+        'Programming Language :: Python :: 2.7',
         'Framework :: Scrapy',
         'Topic :: Utilities',
         'License :: OSI Approved :: BSD License',
