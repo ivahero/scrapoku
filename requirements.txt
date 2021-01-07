@@ -1,7 +1,7 @@
 scrapy==1.0.4
 selenium==2.49.0
 
-lxml==3.5.0  # via scrapy
+lxml==4.6.2  # via scrapy
 cssselect==0.9.1  # via scrapy
 twisted==15.5.0  # via scrapy
 cffi==1.8.3  # via cryptography
