@@ -6,7 +6,7 @@ cssselect==0.9.1  # via scrapy
 twisted==20.3.0  # via scrapy
 cffi==1.8.3  # via cryptography
 pyopenssl==17.5.0  # via scrapy
-cryptography==3.2  # via pyopenssl
+cryptography==3.3.2  # via pyopenssl
 
 pillow==7.1.0
 python-dateutil==2.4.2
