@@ -16,7 +16,7 @@ xlsxwriter==0.8.4
 openpyxl==2.3.3
 
 flask==1.0
-jinja2==2.10.1  # via flask
+jinja2==2.11.3  # via flask
 flask-basicauth==0.2.0
 flask-sslify==0.1.5
 
