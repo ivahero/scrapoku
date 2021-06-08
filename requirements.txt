@@ -8,7 +8,7 @@ cffi==1.8.3  # via cryptography
 pyopenssl==17.5.0  # via scrapy
 cryptography==3.3.2  # via pyopenssl
 
-pillow==8.1.1
+pillow==8.2.0
 python-dateutil==2.4.2
 requests==2.20.0
 
