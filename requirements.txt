@@ -36,6 +36,6 @@ honcho==0.6.6
 paramiko==2.0.9
 
 ipdb==0.8.1
-ipython==4.0.3
+ipython==7.16.3
 pep8==1.7.0
 twine==1.8.1
