@@ -1,4 +1,4 @@
-scrapy==1.0.4
+scrapy==1.8.2
 selenium==2.49.0
 
 lxml==4.6.3  # via scrapy
