@@ -33,7 +33,7 @@ pytz==2015.7  # via bson
 
 gunicorn==19.5.0
 honcho==0.6.6
-paramiko==2.0.9
+paramiko==2.10.1
 
 ipdb==0.8.1
 ipython==4.0.3
